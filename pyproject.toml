@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "phomo"
-version = "1.2.0"
+version = "1.2.0+macmillan.1"
 description = "Python package and CLI utility to create photo mosaics."
 authors = ["Loic Coyle <loic.coyle@hotmail.fr>"]
 license = "MIT"
@@ -18,15 +18,15 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.13"
-pillow = "^10.0.1"
+python = ">=3.9,<4"
+pillow = ">=10.0.1,<13"
 numpy = "^2.0.0"
 tqdm = "^4.60.0"
 matplotlib = "^3.4.1"
 scipy = "^1.11.2"
 
 numba = { version = "^0.60.0", optional = true }
-opencv-python = "^4.10.0.84"
+opencv-python-headless = "^4.10.0.84"
 
 [tool.poetry.extras]
 cuda = ["numba"]

@@ -3,7 +3,7 @@ import math
 from functools import partial
 from multiprocessing.pool import Pool as MpPool
 from os import PathLike
-from typing import Optional, Tuple, Union
+from typing import Callable, Iterable, Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -124,6 +124,7 @@ class Mosaic:
         self,
         workers: int = 1,
         metric: Union[str, MetricCallable] = "norm",
+        progress: Optional[Callable[[int, int], None]] = None,
         **kwargs,
     ) -> np.ndarray:
         """Compute the distance matrix between all the master's tiles and the
@@ -134,6 +135,7 @@ class Mosaic:
             metric: The distance metric used for the distance matrix. Either
                 provide a string, for implemented metrics see ``phomo.metrics.METRICS``.
                 Or a callable, which should take two ``np.ndarray``s and return a float.
+            progress: Called after each master tile with the count so far and the total.
             **kwargs: Passed to `metric`.
 
         Returns:
@@ -152,35 +154,34 @@ class Mosaic:
             LOGGER.info("Using user provided distance metric function.")
             metric_func = metric
 
-        # Compute the distance matrix.
+        # Compute the distance matrix, filling a preallocated array row by row so the
+        # peak memory is one copy of the matrix rather than a list of rows plus the array.
         worker = partial(self._d_matrix_worker, metric_func=metric_func, **kwargs)
+        total = len(self.grid.slices)
+        d_matrix = np.empty((total, len(self.pool.array)), dtype=np.float64)
         if workers != 1:
             LOGGER.info("Computing distance matrix with %i workers.", workers)
             with MpPool(processes=workers) as pool:
-                d_matrix = np.array(
-                    list(
-                        tqdm(
-                            pool.imap(
-                                worker,
-                                self.grid.arrays,
-                                chunksize=len(self.grid) // workers,
-                            ),
-                            total=len(self.grid.slices),
-                            desc="Building distance matrix",
-                        )
-                    )
-                )
+                rows = pool.imap(worker, self.grid.arrays, chunksize=len(self.grid) // workers)
+                self._fill_d_matrix(d_matrix, rows, progress)
         else:
             # get rid of pool overhead if serial computation is desired.
             LOGGER.info("Computing distance matrix in serial.")
-            d_matrix = np.array(
-                [
-                    worker(array)
-                    for array in tqdm(self.grid.arrays, desc="Building distance matrix")
-                ]
-            )
+            self._fill_d_matrix(d_matrix, map(worker, self.grid.arrays), progress)
         LOGGER.debug("d_matrix shape: %s", d_matrix.shape)
         return d_matrix
+
+    @staticmethod
+    def _fill_d_matrix(
+        d_matrix: np.ndarray,
+        rows: Iterable[np.ndarray],
+        progress: Optional[Callable[[int, int], None]],
+    ) -> None:
+        total = d_matrix.shape[0]
+        for i, row in enumerate(tqdm(rows, total=total, desc="Building distance matrix")):
+            d_matrix[i] = row
+            if progress is not None:
+                progress(i + 1, total)
 
     def d_matrix_cuda(self, metric: str = "norm") -> np.ndarray:
         """Compute the distance matrix using CUDA for GPU acceleration.
