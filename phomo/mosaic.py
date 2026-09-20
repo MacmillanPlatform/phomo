@@ -178,7 +178,9 @@ class Mosaic:
         progress: Optional[Callable[[int, int], None]],
     ) -> None:
         total = d_matrix.shape[0]
-        for i, row in enumerate(tqdm(rows, total=total, desc="Building distance matrix")):
+        if progress is None:
+            rows = tqdm(rows, total=total, desc="Building distance matrix")  # a caller with its own reporting gets no bar
+        for i, row in enumerate(rows):
             d_matrix[i] = row
             if progress is not None:
                 progress(i + 1, total)
